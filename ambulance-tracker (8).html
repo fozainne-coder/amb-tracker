@@ -1,0 +1,647 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AMB Tracker — ESAMB Genève</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@300;400;600&display=swap');
+  :root {
+    --bg:#0d0f14;--surface:#161920;--surface2:#1e2230;--border:rgba(255,255,255,0.07);
+    --accent:#00e5a0;--text:#e8eaf0;--muted:#6b7280;
+    --font-mono:'IBM Plex Mono',monospace;--font-sans:'IBM Plex Sans',sans-serif;
+    --s-disponible:#00e5a0;--s-depart:#0099ff;--s-surplace:#ff6b35;--s-quitte:#f59e0b;--s-hopital:#a78bfa;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;}
+  body{font-family:var(--font-sans);background:var(--bg);color:var(--text);height:100vh;display:flex;flex-direction:column;overflow:hidden;}
+
+  header{display:flex;align-items:center;justify-content:space-between;padding:0 1rem;height:52px;background:var(--surface);border-bottom:1px solid var(--border);flex-shrink:0;z-index:100;}
+  .logo{font-family:var(--font-mono);font-size:12px;font-weight:600;letter-spacing:.1em;color:var(--accent);display:flex;align-items:center;gap:8px;}
+  .logo-dot{width:8px;height:8px;background:var(--accent);border-radius:50%;animation:pulse 2s infinite;}
+  @keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.4;transform:scale(.8)}}
+  .header-right{display:flex;align-items:center;gap:8px;}
+  .view-toggle{display:flex;background:var(--bg);border:1px solid var(--border);border-radius:6px;overflow:hidden;}
+  .view-btn{padding:5px 10px;font-family:var(--font-mono);font-size:10px;font-weight:600;background:none;border:none;color:var(--muted);cursor:pointer;}
+  .view-btn.active{background:var(--accent);color:#000;}
+  .time-display{font-family:var(--font-mono);font-size:11px;color:var(--muted);}
+  .conn-status{font-family:var(--font-mono);font-size:10px;padding:2px 7px;border-radius:3px;font-weight:600;}
+  .conn-ok{background:rgba(0,229,160,.12);color:var(--accent);}
+  .conn-err{background:rgba(255,107,53,.12);color:#ff6b35;}
+  .role-badge{font-family:var(--font-mono);font-size:10px;padding:2px 7px;border-radius:3px;font-weight:600;}
+  .role-formateur{background:rgba(0,153,255,.12);color:#0099ff;}
+  .role-etudiant{background:rgba(245,158,11,.12);color:#f59e0b;}
+
+  /* LAYOUT */
+  .app-body{display:flex;flex:1;overflow:hidden;}
+
+  /* SIDEBAR */
+  .sidebar{width:300px;flex-shrink:0;background:var(--surface);border-right:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden;}
+  .sidebar-tabs{display:flex;border-bottom:1px solid var(--border);flex-shrink:0;}
+  .stab{flex:1;padding:9px 4px;font-family:var(--font-mono);font-size:10px;font-weight:600;letter-spacing:.06em;text-align:center;cursor:pointer;color:var(--muted);border-bottom:2px solid transparent;transition:all .15s;}
+  .stab.active{color:var(--accent);border-bottom-color:var(--accent);}
+  .sidebar-panel{flex:1;overflow-y:auto;display:none;}
+  .sidebar-panel.active{display:block;}
+  .sidebar-panel::-webkit-scrollbar{width:3px;}
+  .sidebar-panel::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px;}
+
+  /* PANEL LIVE */
+  .panel-header{padding:10px 14px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;}
+  .panel-title{font-family:var(--font-mono);font-size:10px;font-weight:600;letter-spacing:.1em;color:var(--muted);text-transform:uppercase;}
+  .count-badge{font-family:var(--font-mono);font-size:10px;color:var(--accent);background:rgba(0,229,160,.1);padding:1px 6px;border-radius:3px;}
+  .amb-list-wrap{padding:6px;}
+  .amb-card{background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:9px 11px;margin-bottom:5px;cursor:pointer;transition:all .15s;position:relative;overflow:hidden;}
+  .amb-card:hover{border-color:rgba(255,255,255,.15);transform:translateX(2px);}
+  .amb-card.selected{border-color:rgba(0,229,160,.4);background:rgba(0,229,160,.05);}
+  .amb-card-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:5px;}
+  .amb-name{font-family:var(--font-mono);font-size:12px;font-weight:600;}
+  .status-pill{font-family:var(--font-mono);font-size:8px;font-weight:600;padding:2px 6px;border-radius:3px;text-transform:uppercase;}
+  .amb-crew{font-size:11px;color:var(--muted);}
+  .amb-meta{margin-top:4px;font-family:var(--font-mono);font-size:10px;color:var(--muted);}
+
+  /* PANEL HISTORIQUE */
+  .hist-controls{padding:10px 14px;border-bottom:1px solid var(--border);display:flex;gap:6px;align-items:center;}
+  .hist-select{flex:1;padding:5px 8px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-family:var(--font-mono);font-size:10px;-webkit-appearance:none;appearance:none;}
+  .hist-btn{padding:5px 10px;font-family:var(--font-mono);font-size:10px;font-weight:600;border:none;border-radius:6px;cursor:pointer;transition:all .15s;}
+  .hist-btn.all{background:rgba(0,229,160,.1);color:var(--accent);border:1px solid rgba(0,229,160,.3);}
+  .hist-btn.all.active{background:var(--accent);color:#000;}
+
+  .hist-vehicle{padding:8px 14px;}
+  .hist-vehicle-title{font-family:var(--font-mono);font-size:11px;font-weight:600;margin-bottom:8px;display:flex;align-items:center;gap:6px;}
+  .hist-entry{display:flex;gap:8px;margin-bottom:6px;align-items:flex-start;}
+  .hist-line{display:flex;flex-direction:column;align-items:center;gap:0;}
+  .hist-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0;margin-top:3px;}
+  .hist-vline{width:1px;background:var(--border);flex:1;min-height:16px;margin-top:2px;}
+  .hist-content{flex:1;padding-bottom:6px;border-bottom:0.5px solid var(--border);}
+  .hist-entry:last-child .hist-content{border-bottom:none;}
+  .hist-status{font-size:12px;font-weight:500;}
+  .hist-time{font-family:var(--font-mono);font-size:10px;color:var(--muted);}
+  .hist-coords{font-family:var(--font-mono);font-size:9px;color:var(--muted);margin-top:1px;}
+
+  /* MAP */
+  #map{flex:1;background:#1a1f2e;width:100%;height:100%;}
+  .leaflet-tile{filter:brightness(.6) saturate(.8) hue-rotate(200deg);}
+  .leaflet-popup-content-wrapper{background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:10px;box-shadow:0 8px 32px rgba(0,0,0,.5);}
+  .leaflet-popup-tip{background:var(--surface2);}
+  .leaflet-popup-content{font-family:var(--font-sans);font-size:13px;margin:12px;}
+
+  /* MAP CONTROLS */
+  .map-overlay{position:absolute;top:10px;right:10px;z-index:500;display:flex;flex-direction:column;gap:6px;}
+  .map-ctrl-btn{padding:6px 12px;font-family:var(--font-mono);font-size:10px;font-weight:600;border-radius:6px;cursor:pointer;border:1px solid var(--border);background:var(--surface);color:var(--text);transition:all .15s;}
+  .map-ctrl-btn.active{background:var(--accent);color:#000;border-color:var(--accent);}
+
+  /* VUE ÉTUDIANT */
+  .student-view{display:none;flex:1;align-items:flex-start;justify-content:center;padding:1rem;background:var(--bg);overflow-y:auto;}
+  .student-card{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:1.5rem;width:100%;max-width:420px;margin:auto;}
+  .student-title{font-family:var(--font-mono);font-size:10px;font-weight:600;letter-spacing:.12em;color:var(--muted);text-transform:uppercase;margin-bottom:1.2rem;}
+  .form-group{margin-bottom:.9rem;}
+  .form-label{display:block;font-size:11px;color:var(--muted);margin-bottom:5px;font-family:var(--font-mono);}
+  .form-input,.form-select{width:100%;padding:9px 11px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:var(--font-sans);font-size:14px;-webkit-appearance:none;appearance:none;}
+  .form-input:focus,.form-select:focus{outline:none;border-color:var(--accent);}
+  .form-select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%236b7280' stroke-width='1.5' fill='none'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 11px center;padding-right:34px;}
+  .gps-block{background:var(--bg);border:1px solid var(--border);border-radius:12px;padding:.9rem;margin-bottom:.9rem;}
+  .gps-block-title{font-family:var(--font-mono);font-size:10px;font-weight:600;letter-spacing:.1em;color:var(--muted);text-transform:uppercase;margin-bottom:8px;}
+  .gps-coords{font-family:var(--font-mono);font-size:11px;color:var(--accent);margin-bottom:8px;min-height:16px;}
+  .gps-info{font-size:11px;color:var(--muted);margin-bottom:10px;line-height:1.5;}
+  .track-btn{width:100%;padding:10px;border-radius:8px;border:none;font-family:var(--font-mono);font-size:11px;font-weight:600;cursor:pointer;transition:all .2s;display:flex;align-items:center;justify-content:center;gap:8px;}
+  .track-btn.off{background:rgba(0,229,160,.1);border:1px solid rgba(0,229,160,.3);color:var(--accent);}
+  .track-btn.on{background:var(--accent);color:#000;}
+  .track-btn:disabled{opacity:.4;cursor:not-allowed;}
+  .pulse-dot{width:8px;height:8px;border-radius:50%;background:currentColor;flex-shrink:0;}
+  .track-btn.on .pulse-dot{animation:pulse 1s infinite;}
+  .status-grid{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-bottom:.9rem;}
+  .status-option{padding:9px 7px;border:1px solid var(--border);border-radius:8px;cursor:pointer;text-align:center;background:var(--bg);transition:all .15s;}
+  .status-option.selected{border-width:2px;}
+  .status-option-label{font-size:11px;font-weight:600;display:block;line-height:1.3;}
+  .status-option-icon{font-size:15px;margin-bottom:3px;display:block;}
+  .status-full{grid-column:1/-1;}
+  .send-status-btn{width:100%;padding:10px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:var(--font-mono);font-size:11px;font-weight:600;cursor:pointer;margin-top:6px;}
+  .send-status-btn:disabled{opacity:.4;cursor:not-allowed;}
+  .feedback{text-align:center;font-size:11px;font-family:var(--font-mono);min-height:16px;margin-top:6px;}
+
+  /* STATS BAR */
+  .stats-bar{display:flex;gap:1px;background:var(--border);border-top:1px solid var(--border);flex-shrink:0;}
+  .stat-item{flex:1;padding:7px 4px;background:var(--surface);text-align:center;}
+  .stat-value{font-family:var(--font-mono);font-size:14px;font-weight:600;display:block;}
+  .stat-label{font-size:9px;color:var(--muted);text-transform:uppercase;}
+  .empty-state{padding:1.5rem;text-align:center;color:var(--muted);font-size:12px;line-height:1.8;}
+
+  body.mode-etudiant .view-toggle{display:none;}
+  body.mode-etudiant .stats-bar{display:none !important;}
+  .map-wrap{flex:1;position:relative;display:flex;flex-direction:column;min-height:0;}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo"><div class="logo-dot"></div>AMB TRACKER — ESAMB</div>
+  <div class="header-right">
+    <span class="conn-status conn-err" id="conn-status">● Connexion...</span>
+    <span class="time-display" id="clock">--:--:--</span>
+    <span class="role-badge" id="role-badge"></span>
+    <div class="view-toggle">
+      <button class="view-btn active" onclick="switchView('formateur',event)">FORMATEUR</button>
+      <button class="view-btn" onclick="switchView('etudiant',event)">ÉTUDIANT</button>
+    </div>
+  </div>
+</header>
+
+<!-- VUE FORMATEUR -->
+<div class="app-body" id="view-formateur">
+  <div class="sidebar">
+    <!-- Tabs -->
+    <div class="sidebar-tabs">
+      <div class="stab active" onclick="switchTab('live',this)">EN DIRECT</div>
+      <div class="stab" onclick="switchTab('hist',this)">HISTORIQUE</div>
+    </div>
+
+    <!-- Panel EN DIRECT -->
+    <div class="sidebar-panel active" id="panel-live">
+      <div class="panel-header">
+        <span class="panel-title">Véhicules actifs</span>
+        <span class="count-badge" id="active-count">0 actifs</span>
+      </div>
+      <div class="amb-list-wrap" id="amb-list">
+        <div class="empty-state">En attente de connexions...<br><br>Les étudiants activent le suivi GPS depuis le lien étudiant.</div>
+      </div>
+    </div>
+
+    <!-- Panel HISTORIQUE -->
+    <div class="sidebar-panel" id="panel-hist">
+      <div class="hist-controls">
+        <select class="hist-select" id="hist-select" onchange="renderHistory()">
+          <option value="all">Tous les véhicules</option>
+        </select>
+        <button class="hist-btn all" id="trace-all-btn" onclick="toggleAllTraces()">Traces</button>
+      </div>
+      <div id="hist-content">
+        <div class="empty-state">Aucun historique pour aujourd'hui.<br>Les traces apparaissent dès que les étudiants activent le suivi.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Carte -->
+  <div class="map-wrap">
+    <div id="map" style="width:100%;height:100%;min-height:400px;"></div>
+  </div>
+</div>
+
+<!-- VUE ÉTUDIANT -->
+<div class="app-body student-view" id="view-etudiant">
+  <div class="student-card">
+    <p class="student-title">Interface étudiant</p>
+    <div class="form-group">
+      <label class="form-label">Mon véhicule</label>
+      <select class="form-select" id="amb-select">
+        <option value="">-- Sélectionner --</option>
+        <option value="ESAMB-307">ESAMB 307</option>
+        <option value="ACE-700">ACE 700</option>
+        <option value="SAG-875">SAG 875</option>
+        <option value="ESAMB-308">ESAMB 308</option>
+        <option value="SAR-927">SAR 927</option>
+        <option value="CARDIO">CARDIO</option>
+        <option value="SK-253">SK 253</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Mon nom</label>
+      <input class="form-input" type="text" id="student-name" placeholder="Prénom Nom">
+    </div>
+    <div class="gps-block">
+      <div class="gps-block-title">Suivi GPS en direct</div>
+      <div class="gps-coords" id="gps-coords">Position non activée</div>
+      <div class="gps-info" id="gps-info">Activez le suivi pour partager votre position en temps réel.</div>
+      <button class="track-btn off" id="track-btn" onclick="toggleTracking()" disabled>
+        <span class="pulse-dot"></span>
+        <span id="track-label">DÉMARRER LE SUIVI</span>
+      </button>
+    </div>
+    <label class="form-label">Changer le statut</label>
+    <div class="status-grid">
+      <div class="status-option selected" data-status="disponible" onclick="selectStatus(this)" style="border-color:var(--s-disponible);border-width:2px;">
+        <span class="status-option-icon">🟢</span>
+        <span class="status-option-label" style="color:var(--s-disponible);">Disponible</span>
+      </div>
+      <div class="status-option" data-status="depart" onclick="selectStatus(this)">
+        <span class="status-option-icon">🔵</span>
+        <span class="status-option-label" style="color:var(--s-depart);">Départ</span>
+      </div>
+      <div class="status-option" data-status="surplace" onclick="selectStatus(this)">
+        <span class="status-option-icon">🔴</span>
+        <span class="status-option-label" style="color:var(--s-surplace);">Sur place</span>
+      </div>
+      <div class="status-option" data-status="quitte" onclick="selectStatus(this)">
+        <span class="status-option-icon">🟡</span>
+        <span class="status-option-label" style="color:var(--s-quitte);">Quitte les lieux</span>
+      </div>
+      <div class="status-option status-full" data-status="hopital" onclick="selectStatus(this)">
+        <span class="status-option-icon">🟣</span>
+        <span class="status-option-label" style="color:var(--s-hopital);">Hôpital</span>
+      </div>
+    </div>
+    <button class="send-status-btn" id="send-status-btn" onclick="sendStatusNow()" disabled>Envoyer le statut maintenant</button>
+    <div class="feedback" id="feedback"></div>
+  </div>
+</div>
+
+<!-- STATS BAR -->
+<div class="stats-bar" id="stats-bar">
+  <div class="stat-item"><span class="stat-value" id="stat-disponible" style="color:var(--s-disponible);">0</span><span class="stat-label">Disponible</span></div>
+  <div class="stat-item"><span class="stat-value" id="stat-depart"     style="color:var(--s-depart);">0</span><span class="stat-label">Départ</span></div>
+  <div class="stat-item"><span class="stat-value" id="stat-surplace"   style="color:var(--s-surplace);">0</span><span class="stat-label">Sur place</span></div>
+  <div class="stat-item"><span class="stat-value" id="stat-quitte"     style="color:var(--s-quitte);">0</span><span class="stat-label">Quitte</span></div>
+  <div class="stat-item"><span class="stat-value" id="stat-hopital"    style="color:var(--s-hopital);">0</span><span class="stat-label">Hôpital</span></div>
+</div>
+
+<script type="module">
+import { initializeApp }                          from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+import { getDatabase, ref, set, push, onValue, query, orderByChild, startAt }
+                                                  from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
+
+const firebaseConfig = {
+  apiKey:            "AIzaSyD8mUONx_ceCw5KoyuTjdxjH15Xz4LLKKA",
+  authDomain:        "amb-tracker-esamb.firebaseapp.com",
+  databaseURL:       "https://amb-tracker-esamb-default-rtdb.europe-west1.firebasedatabase.app",
+  projectId:         "amb-tracker-esamb",
+  storageBucket:     "amb-tracker-esamb.firebasestorage.app",
+  messagingSenderId: "267967758932",
+  appId:             "1:267967758932:web:e0f190a67c83f82e2ae3c1"
+};
+const db = getDatabase(initializeApp(firebaseConfig));
+
+const STATUS = {
+  disponible: { label:'Disponible',       color:'#00e5a0', bg:'rgba(0,229,160,.12)' },
+  depart:     { label:'Départ',           color:'#0099ff', bg:'rgba(0,153,255,.12)' },
+  surplace:   { label:'Sur place',        color:'#ff6b35', bg:'rgba(255,107,53,.12)' },
+  quitte:     { label:'Quitte les lieux', color:'#f59e0b', bg:'rgba(245,158,11,.12)' },
+  hopital:    { label:'Hôpital',          color:'#a78bfa', bg:'rgba(167,139,250,.12)' },
+};
+
+const isEtudiant = new URLSearchParams(window.location.search).get('vue') === 'etudiant';
+
+if (isEtudiant) {
+  document.body.classList.add('mode-etudiant');
+  document.getElementById('view-formateur').style.display = 'none';
+  document.getElementById('view-etudiant').style.display  = 'flex';
+  document.getElementById('stats-bar').style.display      = 'none';
+  document.getElementById('role-badge').textContent       = 'ÉTUDIANT';
+  document.getElementById('role-badge').className         = 'role-badge role-etudiant';
+} else {
+  document.getElementById('view-formateur').style.display = 'flex';
+  document.getElementById('view-etudiant').style.display  = 'none';
+  document.getElementById('stats-bar').style.display      = 'flex';
+  document.getElementById('role-badge').textContent       = 'FORMATEUR';
+  document.getElementById('role-badge').className         = 'role-badge role-formateur';
+}
+
+// ── CARTE ──────────────────────────────────────────────────────
+let map, markers = {}, polylines = {}, selectedAmb = null, ambData = {}, histData = {};
+let showAllTraces = true;
+
+if (!isEtudiant) {
+  setTimeout(() => {
+    map = L.map('map', {zoomControl:false}).setView([46.2044, 6.1432], 13);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {attribution:'© OSM'}).addTo(map);
+    L.control.zoom({position:'bottomright'}).addTo(map);
+    map.invalidateSize();
+  }, 200);
+}
+
+const timeAgo = ts => {
+  if (!ts) return '?';
+  const s = Math.floor((Date.now()-ts)/1000);
+  if (s < 60) return s+'s';
+  const m = Math.floor(s/60);
+  return m < 60 ? m+'min' : Math.floor(m/60)+'h';
+};
+
+const fmtTime = ts => {
+  if (!ts) return '?';
+  return new Date(ts).toLocaleTimeString('fr-CH', {hour:'2-digit',minute:'2-digit',second:'2-digit'});
+};
+
+const markerLabel = id => {
+  if (id === 'CARDIO') return 'CARD';
+  if (id.includes('-')) { const p=id.split('-'); return p[0].slice(0,4)+p[1].slice(0,3); }
+  return id.slice(0,5);
+};
+
+function placeMarker(id, d) {
+  if (!map) return;
+  const cfg = STATUS[d.status]||STATUS.disponible;
+  const lbl = markerLabel(id);
+  const icon = L.divIcon({
+    className:'',
+    html:`<div style="min-width:46px;height:34px;border-radius:17px 17px 17px 0;transform:rotate(-45deg);background:${cfg.color};border:2px solid rgba(255,255,255,.25);display:flex;align-items:center;justify-content:center;padding:0 7px;box-shadow:0 4px 16px rgba(0,0,0,.5),0 0 0 3px ${cfg.color}33;">
+      <span style="transform:rotate(45deg);font-size:9px;font-weight:700;color:#000;font-family:monospace;white-space:nowrap;">${lbl}</span>
+    </div>`,
+    iconSize:[46,34], iconAnchor:[14,34], popupAnchor:[9,-36]
+  });
+  if (markers[id]) markers[id].remove();
+  const crew = Array.isArray(d.crew)?d.crew.join(' · '):(d.crew||'—');
+  const m = L.marker([d.lat,d.lng],{icon}).addTo(map);
+  m.bindPopup(`<div style="min-width:180px;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+      <strong style="font-family:monospace;color:${cfg.color};">${id.replace(/-/g,' ')}</strong>
+      <span style="background:${cfg.bg};color:${cfg.color};padding:2px 6px;border-radius:3px;font-size:10px;font-family:monospace;">${cfg.label.toUpperCase()}</span>
+    </div>
+    <div style="color:#9ca3af;font-size:12px;margin-bottom:4px;">👤 ${crew}</div>
+    <div style="color:#9ca3af;font-size:12px;">🕐 il y a ${timeAgo(d.lastUpdate)}</div>
+  </div>`);
+  m.on('click', ()=>selectAmb(id));
+  markers[id] = m;
+}
+
+// Dessine la trace GPS d'un véhicule
+function drawTrace(id) {
+  if (!map) return;
+  if (polylines[id]) { polylines[id].remove(); delete polylines[id]; }
+  const entries = histData[id];
+  if (!entries || entries.length < 2) return;
+  const cfg = STATUS[ambData[id]?.status]||STATUS.disponible;
+  // Points colorés selon le statut au moment du point
+  const coords = entries.map(e => [e.lat, e.lng]);
+  const poly = L.polyline(coords, {
+    color: cfg.color,
+    weight: 3,
+    opacity: 0.7,
+    dashArray: '6 4'
+  }).addTo(map);
+  // Petits cercles aux changements de statut
+  entries.forEach(e => {
+    const sc = STATUS[e.status]||STATUS.disponible;
+    L.circleMarker([e.lat,e.lng], {
+      radius: 4, color: sc.color, fillColor: sc.color,
+      fillOpacity: 1, weight: 2
+    }).addTo(map).bindTooltip(`${fmtTime(e.ts)} — ${sc.label}`, {direction:'top'});
+  });
+  polylines[id] = poly;
+}
+
+function clearAllTraces() {
+  Object.values(polylines).forEach(p => p.remove());
+  polylines = {};
+}
+
+function drawAllTraces() {
+  clearAllTraces();
+  Object.keys(histData).forEach(id => drawTrace(id));
+}
+
+window.toggleAllTraces = () => {
+  showAllTraces = !showAllTraces;
+  const btn = document.getElementById('trace-all-btn');
+  btn.classList.toggle('active', showAllTraces);
+  if (showAllTraces) drawAllTraces(); else clearAllTraces();
+};
+
+function selectAmb(id) {
+  selectedAmb = id;
+  const d = ambData[id];
+  if (d && map) {
+    map.flyTo([d.lat,d.lng],15,{duration:.8});
+    markers[id]?.openPopup();
+    // Zoom sur la trace de ce véhicule
+    if (polylines[id]) map.fitBounds(polylines[id].getBounds(), {padding:[40,40]});
+  }
+  renderLive();
+  // Passer sur l'onglet historique filtré sur ce véhicule
+  const sel = document.getElementById('hist-select');
+  if (sel) { sel.value = id; renderHistory(); }
+}
+window._sel = selectAmb;
+
+function renderLive() {
+  const list = document.getElementById('amb-list');
+  if (!list) return;
+  const ids = Object.keys(ambData);
+  if (!ids.length) {
+    list.innerHTML='<div class="empty-state">Aucun véhicule connecté.</div>';
+    document.getElementById('active-count').textContent='0 actifs';
+    Object.keys(STATUS).forEach(s=>{const el=document.getElementById('stat-'+s);if(el)el.textContent='0';});
+    return;
+  }
+  document.getElementById('active-count').textContent = ids.length+' actifs';
+  list.innerHTML = ids.map(id=>{
+    const d=ambData[id], cfg=STATUS[d.status]||STATUS.disponible;
+    const crew=Array.isArray(d.crew)?d.crew.join(' · '):(d.crew||'—');
+    const lbl=id.replace(/-/g,' ');
+    return `<div class="amb-card${selectedAmb===id?' selected':''}" onclick="window._sel('${id}')">
+      <div style="position:absolute;left:0;top:0;bottom:0;width:3px;background:${cfg.color};border-radius:8px 0 0 8px;"></div>
+      <div class="amb-card-top">
+        <span class="amb-name" style="color:${cfg.color};">${lbl}</span>
+        <span class="status-pill" style="background:${cfg.bg};color:${cfg.color};">${cfg.label}</span>
+      </div>
+      <div class="amb-crew">${crew}</div>
+      <div class="amb-meta">🕐 ${timeAgo(d.lastUpdate)}</div>
+    </div>`;
+  }).join('');
+  const c={};Object.keys(STATUS).forEach(s=>c[s]=0);
+  ids.forEach(id=>{const s=ambData[id].status;if(s in c)c[s]++;});
+  Object.keys(STATUS).forEach(s=>{const el=document.getElementById('stat-'+s);if(el)el.textContent=c[s];});
+}
+
+// ── HISTORIQUE ─────────────────────────────────────────────────
+window.renderHistory = () => {
+  const sel   = document.getElementById('hist-select');
+  const filter = sel ? sel.value : 'all';
+  const cont  = document.getElementById('hist-content');
+  if (!cont) return;
+
+  const ids = filter === 'all' ? Object.keys(histData) : (histData[filter] ? [filter] : []);
+  if (!ids.length) {
+    cont.innerHTML = '<div class="empty-state">Aucun historique pour aujourd\'hui.</div>';
+    return;
+  }
+
+  cont.innerHTML = ids.map(id => {
+    const entries = histData[id];
+    if (!entries || !entries.length) return '';
+    const cfg = STATUS[ambData[id]?.status]||STATUS.disponible;
+    const lbl = id.replace(/-/g,' ');
+    const rows = entries.slice().reverse().map((e,i,arr) => {
+      const sc = STATUS[e.status]||STATUS.disponible;
+      return `<div class="hist-entry">
+        <div class="hist-line">
+          <div class="hist-dot" style="background:${sc.color};"></div>
+          ${i < arr.length-1 ? '<div class="hist-vline"></div>' : ''}
+        </div>
+        <div class="hist-content">
+          <div class="hist-status" style="color:${sc.color};">${sc.label}</div>
+          <div class="hist-time">${fmtTime(e.ts)}</div>
+          <div class="hist-coords">${e.lat.toFixed(4)}, ${e.lng.toFixed(4)}</div>
+        </div>
+      </div>`;
+    }).join('');
+    return `<div class="hist-vehicle">
+      <div class="hist-vehicle-title">
+        <div style="width:8px;height:8px;border-radius:50%;background:${cfg.color};flex-shrink:0;"></div>
+        ${lbl} — ${entries.length} points
+      </div>
+      ${rows}
+    </div>`;
+  }).join('');
+};
+
+// Mise à jour du sélecteur véhicule dans l'historique
+function updateHistSelect() {
+  const sel = document.getElementById('hist-select');
+  if (!sel) return;
+  const ids = Object.keys(histData);
+  sel.innerHTML = '<option value="all">Tous les véhicules</option>' +
+    ids.map(id=>`<option value="${id}">${id.replace(/-/g,' ')}</option>`).join('');
+}
+
+// ── FIREBASE — positions en direct ────────────────────────────
+onValue(ref(db,'ambulances'), snap=>{
+  ambData = snap.val()||{};
+  if (!isEtudiant) {
+    Object.keys(markers).forEach(id=>{if(!ambData[id]){markers[id].remove();delete markers[id];}});
+    Object.entries(ambData).forEach(([id,d])=>{if(d.lat&&d.lng)placeMarker(id,d);});
+    renderLive();
+  }
+  document.getElementById('conn-status').textContent='● Connecté';
+  document.getElementById('conn-status').className='conn-status conn-ok';
+},()=>{
+  document.getElementById('conn-status').textContent='● Hors ligne';
+  document.getElementById('conn-status').className='conn-status conn-err';
+});
+
+// ── FIREBASE — historique du jour ─────────────────────────────
+// Début de la journée en cours (minuit local)
+const todayStart = (() => {
+  const d = new Date(); d.setHours(0,0,0,0); return d.getTime();
+})();
+
+onValue(
+  query(ref(db,'historique'), orderByChild('ts'), startAt(todayStart)),
+  snap => {
+    histData = {};
+    snap.forEach(child => {
+      const e = child.val();
+      if (!e.ambId) return;
+      if (!histData[e.ambId]) histData[e.ambId] = [];
+      histData[e.ambId].push(e);
+    });
+    if (!isEtudiant) {
+      updateHistSelect();
+      renderHistory();
+      if (showAllTraces) drawAllTraces();
+    }
+  }
+);
+
+// ── VUE ÉTUDIANT ───────────────────────────────────────────────
+let currentStatus = 'disponible';
+let currentLat = null, currentLng = null;
+let trackingActive = false;
+let watchId = null;
+let autoSendInterval = null;
+const AUTO_INTERVAL = 15000;
+
+function checkReady() {
+  const ok = document.getElementById('amb-select').value && document.getElementById('student-name').value.trim();
+  document.getElementById('track-btn').disabled = !ok;
+}
+document.getElementById('amb-select')?.addEventListener('change', checkReady);
+document.getElementById('student-name')?.addEventListener('input', checkReady);
+
+async function pushToFirebase() {
+  const ambId = document.getElementById('amb-select').value;
+  const name  = document.getElementById('student-name').value.trim();
+  if (!ambId || !name || !currentLat) return;
+  const existing = ambData[ambId];
+  let crew = existing?.crew||[];
+  if (!Array.isArray(crew)) crew=[crew];
+  if (!crew.includes(name)) crew=[...crew,name];
+  const now = Date.now();
+  // Position en direct
+  await set(ref(db,'ambulances/'+ambId), {status:currentStatus,lat:currentLat,lng:currentLng,crew,lastUpdate:now});
+  // Historique — enregistrer chaque point avec horodatage
+  await push(ref(db,'historique'), {ambId,status:currentStatus,lat:currentLat,lng:currentLng,ts:now});
+}
+
+window.toggleTracking = () => { trackingActive ? stopTracking() : startTracking(); };
+
+function startTracking() {
+  if (!navigator.geolocation) { showFeedback('GPS non disponible','err'); return; }
+  trackingActive = true;
+  const btn=document.getElementById('track-btn'), lbl=document.getElementById('track-label');
+  btn.classList.replace('off','on'); lbl.textContent='SUIVI ACTIF — APPUYER POUR ARRÊTER';
+  document.getElementById('gps-info').textContent='Position mise à jour toutes les 15 s. Gardez la page ouverte.';
+  document.getElementById('send-status-btn').disabled=false;
+  watchId = navigator.geolocation.watchPosition(
+    pos=>{
+      currentLat=pos.coords.latitude; currentLng=pos.coords.longitude;
+      document.getElementById('gps-coords').textContent=`📍 ${currentLat.toFixed(5)}, ${currentLng.toFixed(5)}`;
+    },
+    ()=>showFeedback('Erreur GPS — autorisez la localisation','err'),
+    {enableHighAccuracy:true,maximumAge:10000,timeout:15000}
+  );
+  autoSendInterval = setInterval(async()=>{
+    if(currentLat){await pushToFirebase();showFeedback('✓ Position envoyée','ok');}
+  },AUTO_INTERVAL);
+  setTimeout(async()=>{if(currentLat)await pushToFirebase();},2000);
+}
+
+function stopTracking() {
+  trackingActive=false;
+  if(watchId!==null){navigator.geolocation.clearWatch(watchId);watchId=null;}
+  if(autoSendInterval){clearInterval(autoSendInterval);autoSendInterval=null;}
+  const btn=document.getElementById('track-btn'),lbl=document.getElementById('track-label');
+  btn.classList.replace('on','off');lbl.textContent='DÉMARRER LE SUIVI';
+  document.getElementById('gps-info').textContent='Suivi arrêté. Votre position n\'est plus partagée.';
+  document.getElementById('send-status-btn').disabled=true;
+  showFeedback('Suivi arrêté','err');
+}
+
+window.selectStatus = el => {
+  document.querySelectorAll('.status-option').forEach(o=>{o.classList.remove('selected');o.style.borderColor='';o.style.borderWidth='';});
+  el.classList.add('selected');
+  currentStatus=el.dataset.status;
+  el.style.borderColor=STATUS[currentStatus].color;el.style.borderWidth='2px';
+};
+
+window.sendStatusNow = async() => {
+  if(!currentLat){showFeedback('⚠ Position GPS non disponible','err');return;}
+  await pushToFirebase();
+  showFeedback('✓ Statut envoyé : '+STATUS[currentStatus].label,'ok');
+};
+
+function showFeedback(msg,type){
+  const fb=document.getElementById('feedback');
+  fb.style.color=type==='ok'?'#00e5a0':'#ff6b35';fb.textContent=msg;
+  setTimeout(()=>fb.textContent='',3000);
+}
+
+// ── TABS & SWITCH VUE ──────────────────────────────────────────
+window.switchTab = (tab, el) => {
+  document.querySelectorAll('.stab').forEach(t=>t.classList.remove('active'));
+  el.classList.add('active');
+  document.querySelectorAll('.sidebar-panel').forEach(p=>p.classList.remove('active'));
+  document.getElementById('panel-'+tab).classList.add('active');
+  if (tab==='hist') renderHistory();
+};
+
+window.switchView = (view,evt) => {
+  document.querySelectorAll('.view-btn').forEach(b=>b.classList.remove('active'));
+  evt.currentTarget.classList.add('active');
+  if(view==='formateur'){
+    document.getElementById('view-formateur').style.display='flex';
+    document.getElementById('view-etudiant').style.display='none';
+    document.getElementById('stats-bar').style.display='flex';
+    setTimeout(()=>map?.invalidateSize(),100);
+  }else{
+    document.getElementById('view-formateur').style.display='none';
+    document.getElementById('view-etudiant').style.display='flex';
+    document.getElementById('stats-bar').style.display='none';
+  }
+};
+
+const tick=()=>document.getElementById('clock').textContent=new Date().toLocaleTimeString('fr-CH',{hour12:false});
+tick();setInterval(tick,1000);
+setInterval(renderLive,15000);
+</script>
+</body>
+</html>
