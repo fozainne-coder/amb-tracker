@@ -1,0 +1,891 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>AMB Tracker — ESAMB</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap');
+:root {
+  --bg:#0d0f14;--surface:#161920;--surface2:#1e2230;--border:rgba(255,255,255,0.08);
+  --accent:#00e5a0;--text:#e8eaf0;--muted:#6b7280;
+  --font-mono:'IBM Plex Mono',monospace;--font-sans:'IBM Plex Sans',sans-serif;
+  --s-disponible:#00e5a0;--s-engage:#ff3b3b;--s-depart:#0099ff;
+  --s-surplace:#ff6b35;--s-quitte:#f59e0b;--s-hopital:#a78bfa;
+  --header-h:52px;--bottom-nav-h:60px;
+}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+html,body{height:100%;overflow:hidden;font-family:var(--font-sans);background:var(--bg);color:var(--text);}
+
+/* HEADER */
+header{position:fixed;top:0;left:0;right:0;height:var(--header-h);background:var(--surface);border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;padding:0 14px;z-index:200;}
+.logo{font-family:var(--font-mono);font-size:11px;font-weight:600;letter-spacing:.1em;color:var(--accent);display:flex;align-items:center;gap:7px;}
+.logo-dot{width:7px;height:7px;background:var(--accent);border-radius:50%;animation:blink 2s infinite;}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.2}}
+.hdr-right{display:flex;align-items:center;gap:7px;}
+.conn-dot{width:7px;height:7px;border-radius:50%;background:#ff6b35;}
+.conn-dot.ok{background:var(--accent);}
+.time-lbl{font-family:var(--font-mono);font-size:10px;color:var(--muted);}
+.role-badge{font-family:var(--font-mono);font-size:9px;padding:2px 7px;border-radius:3px;font-weight:600;}
+.role-formateur{background:rgba(0,153,255,.15);color:#0099ff;}
+.role-etudiant{background:rgba(245,158,11,.15);color:#f59e0b;}
+.role-hopital{background:rgba(255,59,59,.15);color:#ff3b3b;}
+.view-toggle{display:flex;background:var(--bg);border:1px solid var(--border);border-radius:5px;overflow:hidden;}
+.view-btn{padding:4px 9px;font-family:var(--font-mono);font-size:9px;font-weight:600;background:none;border:none;color:var(--muted);cursor:pointer;}
+.view-btn.active{background:var(--accent);color:#000;}
+
+/* MAIN CONTENT AREA */
+.main{position:fixed;top:var(--header-h);left:0;right:0;bottom:0;overflow:hidden;}
+
+/* ===== FORMATEUR ===== */
+#view-formateur{display:flex;width:100%;height:100%;}
+.sidebar{width:290px;flex-shrink:0;background:var(--surface);border-right:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden;}
+.sidebar-tabs{display:flex;border-bottom:1px solid var(--border);flex-shrink:0;}
+.stab{flex:1;padding:9px 4px;font-family:var(--font-mono);font-size:10px;font-weight:600;text-align:center;cursor:pointer;color:var(--muted);border-bottom:2px solid transparent;}
+.stab.active{color:var(--accent);border-bottom-color:var(--accent);}
+.sidebar-panel{flex:1;overflow-y:auto;display:none;}
+.sidebar-panel.active{display:block;}
+.sidebar-panel::-webkit-scrollbar{width:3px;}
+.sidebar-panel::-webkit-scrollbar-thumb{background:var(--border);}
+.panel-header{padding:10px 14px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;}
+.panel-title{font-family:var(--font-mono);font-size:10px;font-weight:600;letter-spacing:.1em;color:var(--muted);text-transform:uppercase;}
+.count-badge{font-family:var(--font-mono);font-size:10px;color:var(--accent);background:rgba(0,229,160,.1);padding:1px 6px;border-radius:3px;}
+.amb-list-wrap{padding:6px;}
+.amb-card{background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:9px 11px;margin-bottom:5px;cursor:pointer;transition:all .15s;position:relative;overflow:hidden;}
+.amb-card:hover{border-color:rgba(255,255,255,.15);}
+.amb-card.selected{border-color:rgba(0,229,160,.4);background:rgba(0,229,160,.05);}
+.amb-card-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;}
+.amb-name{font-family:var(--font-mono);font-size:12px;font-weight:600;}
+.status-pill{font-family:var(--font-mono);font-size:8px;font-weight:600;padding:2px 6px;border-radius:3px;text-transform:uppercase;}
+.amb-crew{font-size:11px;color:var(--muted);margin-bottom:3px;}
+.timer-row{display:flex;gap:4px;flex-wrap:wrap;margin-top:3px;}
+.timer-chip{font-family:var(--font-mono);font-size:9px;padding:2px 5px;border-radius:3px;background:var(--bg);}
+.amb-meta{margin-top:3px;font-family:var(--font-mono);font-size:10px;color:var(--muted);}
+.announce-preview{margin-top:5px;font-size:11px;color:var(--accent);background:rgba(0,229,160,.06);border-radius:4px;padding:4px 7px;border-left:2px solid var(--accent);font-style:italic;}
+.eta-chip{display:flex;align-items:center;gap:5px;margin-top:4px;padding:4px 8px;border-radius:5px;font-family:var(--font-mono);font-size:10px;font-weight:600;background:rgba(0,153,255,.1);color:#0099ff;border:1px solid rgba(0,153,255,.2);}
+.eta-chip.arrived{background:rgba(0,229,160,.1);color:var(--accent);border-color:rgba(0,229,160,.2);}
+.alarm-eta{font-family:var(--font-mono);font-size:14px;font-weight:600;padding:7px 10px;border-radius:7px;margin-top:8px;background:rgba(0,153,255,.1);border:1px solid rgba(0,153,255,.2);color:#0099ff;}
+.alarm-eta.arrived{background:rgba(0,229,160,.1);border-color:rgba(0,229,160,.2);color:#00e5a0;}
+.hist-controls{padding:10px 14px;border-bottom:1px solid var(--border);display:flex;gap:6px;}
+.hist-select{flex:1;padding:5px 8px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-family:var(--font-mono);font-size:10px;-webkit-appearance:none;}
+.hist-btn{padding:5px 9px;font-family:var(--font-mono);font-size:10px;font-weight:600;border-radius:6px;cursor:pointer;border:1px solid rgba(0,229,160,.3);background:rgba(0,229,160,.1);color:var(--accent);}
+.hist-btn.active{background:var(--accent);color:#000;}
+.pdf-btn{padding:5px 9px;font-family:var(--font-mono);font-size:10px;font-weight:600;background:rgba(167,139,250,.1);border:1px solid rgba(167,139,250,.3);color:#a78bfa;border-radius:5px;cursor:pointer;}
+.hist-vehicle{padding:10px 14px;border-bottom:1px solid var(--border);}
+.hist-vehicle-title{font-family:var(--font-mono);font-size:11px;font-weight:600;margin-bottom:8px;display:flex;align-items:center;gap:6px;}
+.timer-block{background:var(--bg);border-radius:8px;padding:10px;font-family:var(--font-mono);font-size:11px;}
+.timer-line{display:flex;justify-content:space-between;padding:4px 0;border-bottom:.5px solid var(--border);}
+.timer-line:last-child{border-bottom:none;}
+.timer-label{color:var(--muted);}
+.timer-value{font-weight:600;}
+#map{flex:1;background:#1a1f2e;width:100%;height:100%;}
+.leaflet-tile{filter:brightness(.6) saturate(.8) hue-rotate(200deg);}
+.leaflet-popup-content-wrapper{background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:10px;box-shadow:0 8px 32px rgba(0,0,0,.5);}
+.leaflet-popup-tip{background:var(--surface2);}
+.leaflet-popup-content{font-family:var(--font-sans);font-size:13px;margin:12px;}
+.map-wrap{flex:1;position:relative;display:flex;flex-direction:column;min-height:0;}
+.stats-bar{position:fixed;bottom:0;left:0;right:0;display:flex;gap:1px;background:var(--border);border-top:1px solid var(--border);z-index:100;}
+.stat-item{flex:1;padding:6px 4px;background:var(--surface);text-align:center;}
+.stat-value{font-family:var(--font-mono);font-size:13px;font-weight:600;display:block;}
+.stat-label{font-size:9px;color:var(--muted);text-transform:uppercase;}
+.empty-state{padding:1.5rem;text-align:center;color:var(--muted);font-size:12px;line-height:1.8;}
+
+/* ===== ETUDIANT — MOBILE APP ===== */
+#view-etudiant{display:none;width:100%;height:100%;flex-direction:column;}
+
+/* Navigation bas */
+.bottom-nav{position:absolute;bottom:0;left:0;right:0;height:var(--bottom-nav-h);background:var(--surface);border-top:1px solid var(--border);display:flex;z-index:10;}
+.bnav-btn{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;cursor:pointer;border:none;background:none;color:var(--muted);transition:color .2s;}
+.bnav-btn.active{color:var(--accent);}
+.bnav-icon{font-size:20px;line-height:1;}
+.bnav-label{font-family:var(--font-mono);font-size:9px;font-weight:600;letter-spacing:.04em;}
+.bnav-btn.active .bnav-label{color:var(--accent);}
+
+/* Panneaux étudiant */
+.etud-panels{flex:1;overflow:hidden;position:relative;}
+.etud-panel{position:absolute;inset:0;overflow-y:auto;padding:12px;display:none;flex-direction:column;gap:10px;}
+.etud-panel.active{display:flex;}
+.etud-panel::-webkit-scrollbar{width:0;}
+
+/* Carte config */
+.ecard{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:12px;}
+.ecard-title{font-family:var(--font-mono);font-size:9px;font-weight:600;letter-spacing:.1em;color:var(--muted);text-transform:uppercase;margin-bottom:10px;}
+
+/* Sélecteurs */
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+.form-select,.form-input{width:100%;padding:10px 11px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:var(--font-sans);font-size:14px;-webkit-appearance:none;}
+.form-select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='7' viewBox='0 0 10 7'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%236b7280' stroke-width='1.5' fill='none'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 10px center;padding-right:30px;}
+.form-select:focus,.form-input:focus{outline:none;border-color:var(--accent);}
+
+/* ENGAGE — grand bouton rouge */
+.engage-btn{width:100%;padding:15px;border-radius:12px;border:2px solid var(--s-engage);background:rgba(255,59,59,.1);color:var(--s-engage);font-family:var(--font-mono);font-size:16px;font-weight:600;letter-spacing:.08em;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:10px;transition:all .2s;}
+.engage-btn.fired{background:var(--s-engage);color:#fff;}
+.engage-btn:disabled{opacity:.3;cursor:not-allowed;}
+.engage-ring{width:12px;height:12px;border-radius:50%;background:currentColor;flex-shrink:0;}
+.engage-btn.fired .engage-ring{animation:blink .7s infinite;}
+
+/* GPS compact */
+.gps-row{display:flex;gap:8px;align-items:center;}
+.gps-coords-sm{flex:1;font-family:var(--font-mono);font-size:11px;color:var(--accent);padding:9px 10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;}
+.track-btn-sm{padding:9px 14px;border-radius:8px;border:none;font-family:var(--font-mono);font-size:10px;font-weight:600;cursor:pointer;white-space:nowrap;flex-shrink:0;}
+.track-btn-sm.off{background:rgba(0,229,160,.1);border:1px solid rgba(0,229,160,.3);color:var(--accent);}
+.track-btn-sm.on{background:var(--accent);color:#000;}
+.track-btn-sm:disabled{opacity:.4;cursor:not-allowed;}
+
+/* Statuts — grille 3x2 compacte */
+.status-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;}
+.status-btn{padding:10px 4px;border:1px solid var(--border);border-radius:8px;cursor:pointer;text-align:center;background:var(--bg);transition:all .15s;}
+.status-btn.active{border-width:2px;}
+.status-btn-icon{font-size:16px;display:block;margin-bottom:3px;}
+.status-btn-label{font-size:10px;font-weight:600;display:block;line-height:1.2;}
+.send-btn-sm{width:100%;padding:10px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:var(--font-mono);font-size:10px;font-weight:600;cursor:pointer;margin-top:6px;}
+.send-btn-sm:disabled{opacity:.4;cursor:not-allowed;}
+
+/* Alarmes — grille 2x3 */
+.alarm-grid{display:grid;grid-template-columns:1fr 1fr;gap:7px;}
+.alarm-btn{padding:11px 7px;border-radius:8px;cursor:pointer;text-align:center;font-family:var(--font-mono);font-size:12px;font-weight:600;border:1.5px solid;transition:all .15s;}
+.alarm-btn.fired{opacity:.4;cursor:not-allowed;}
+.alarm-full{grid-column:1/-1;}
+
+/* Annonce */
+.form-textarea{width:100%;padding:10px 11px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:var(--font-sans);font-size:14px;resize:none;line-height:1.5;}
+.form-textarea:focus{outline:none;border-color:var(--accent);}
+.char-count{font-family:var(--font-mono);font-size:10px;color:var(--muted);text-align:right;margin-top:4px;}
+.send-announce-btn{width:100%;padding:12px;background:var(--accent);border:none;border-radius:8px;color:#000;font-family:var(--font-mono);font-size:12px;font-weight:600;cursor:pointer;margin-top:6px;}
+.send-announce-btn:disabled{opacity:.4;cursor:not-allowed;}
+.announce-confirm{text-align:center;font-size:11px;font-family:var(--font-mono);min-height:18px;margin-top:6px;color:var(--accent);}
+
+/* Feedback toast */
+.feedback-toast{position:fixed;bottom:70px;left:50%;transform:translateX(-50%);background:var(--surface2);border:1px solid var(--border);border-radius:20px;padding:7px 16px;font-family:var(--font-mono);font-size:11px;z-index:300;opacity:0;transition:opacity .3s;pointer-events:none;white-space:nowrap;}
+.feedback-toast.show{opacity:1;}
+
+/* ===== HOPITAL ===== */
+#view-hopital{display:none;width:100%;height:100%;flex-direction:column;}
+.hosp-header{padding:12px 16px;border-bottom:1px solid rgba(255,59,59,.2);background:#110a0a;display:flex;justify-content:space-between;align-items:center;flex-shrink:0;}
+.hosp-title{font-family:var(--font-mono);font-size:13px;font-weight:600;color:#ff3b3b;letter-spacing:.07em;}
+.hosp-clock{font-family:var(--font-mono);font-size:22px;font-weight:600;color:var(--accent);}
+.hosp-body{flex:1;overflow:hidden;display:grid;grid-template-columns:1fr 1fr;}
+@media(max-width:700px){.hosp-body{grid-template-columns:1fr;}}
+.hosp-col{overflow-y:auto;padding:12px;}
+.hosp-col+.hosp-col{border-left:1px solid var(--border);}
+.hosp-col-title{font-family:var(--font-mono);font-size:9px;font-weight:600;letter-spacing:.1em;color:var(--muted);text-transform:uppercase;margin-bottom:10px;padding-bottom:8px;border-bottom:1px solid var(--border);}
+.alarm-card{background:#161920;border:2px solid;border-radius:10px;padding:12px;margin-bottom:10px;position:relative;}
+.alarm-type{font-family:var(--font-mono);font-size:18px;font-weight:600;margin-bottom:5px;}
+.alarm-vehicle{font-size:14px;font-weight:600;color:var(--text);margin-bottom:3px;}
+.alarm-time-sent{font-family:var(--font-mono);font-size:11px;color:var(--muted);}
+.alarm-crew-hosp{font-size:12px;color:var(--muted);margin-top:2px;}
+.alarm-elapsed{font-family:var(--font-mono);font-size:12px;font-weight:600;margin-top:6px;padding-top:6px;border-top:1px solid rgba(255,255,255,.07);}
+.alarm-ping{position:absolute;top:12px;right:12px;width:10px;height:10px;border-radius:50%;animation:ping 1.2s infinite;}
+@keyframes ping{0%{transform:scale(1);opacity:1}100%{transform:scale(2.5);opacity:0}}
+.announce-hosp-card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:10px;margin-bottom:10px;}
+.announce-hosp-vehicle{font-family:var(--font-mono);font-size:11px;font-weight:600;color:var(--accent);margin-bottom:3px;}
+.announce-hosp-time{font-family:var(--font-mono);font-size:10px;color:var(--muted);margin-bottom:7px;}
+.announce-hosp-text{font-size:13px;color:var(--text);line-height:1.6;white-space:pre-wrap;}
+.no-data{padding:1.5rem;text-align:center;color:var(--muted);font-size:13px;line-height:2;}
+
+body.mode-etudiant .view-toggle{display:none;}
+body.mode-hopital .view-toggle{display:none;}
+body.mode-hopital header{background:#110a0a;border-bottom-color:rgba(255,59,59,.2);}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo"><div class="logo-dot"></div>AMB TRACKER</div>
+  <div class="hdr-right">
+    <div class="conn-dot" id="conn-dot"></div>
+    <span class="time-lbl" id="clock">--:--:--</span>
+    <span class="role-badge" id="role-badge"></span>
+    <div class="view-toggle">
+      <button class="view-btn active" onclick="switchView('formateur',event)">FORMAT.</button>
+      <button class="view-btn" onclick="switchView('etudiant',event)">ETUD.</button>
+    </div>
+  </div>
+</header>
+
+<div class="main">
+
+  <!-- ===== VUE FORMATEUR ===== -->
+  <div id="view-formateur" style="display:flex;width:100%;height:calc(100% - 34px);">
+    <div class="sidebar">
+      <div class="sidebar-tabs">
+        <div class="stab active" onclick="switchTab('live',this)">EN DIRECT</div>
+        <div class="stab" onclick="switchTab('hist',this)">HISTORIQUE</div>
+      </div>
+      <div class="sidebar-panel active" id="panel-live">
+        <div class="panel-header">
+          <span class="panel-title">Vehicules</span>
+          <span class="count-badge" id="active-count">0</span>
+        </div>
+        <div class="amb-list-wrap" id="amb-list">
+          <div class="empty-state">En attente...</div>
+        </div>
+      </div>
+      <div class="sidebar-panel" id="panel-hist">
+        <div class="hist-controls">
+          <select class="hist-select" id="hist-select" onchange="renderHistory()"><option value="all">Tous</option></select>
+          <button class="hist-btn" id="trace-all-btn" onclick="toggleAllTraces()">Traces</button>
+          <button class="pdf-btn" onclick="exportPDF()">PDF</button>
+        </div>
+        <div id="hist-content"><div class="empty-state">Aucun historique.</div></div>
+      </div>
+    </div>
+    <div class="map-wrap">
+      <div id="map" style="width:100%;height:100%;min-height:400px;"></div>
+    </div>
+  </div>
+  <div class="stats-bar" id="stats-bar">
+    <div class="stat-item"><span class="stat-value" id="stat-disponible" style="color:var(--s-disponible);">0</span><span class="stat-label">Dispo</span></div>
+    <div class="stat-item"><span class="stat-value" id="stat-depart"     style="color:var(--s-depart);">0</span><span class="stat-label">Depart</span></div>
+    <div class="stat-item"><span class="stat-value" id="stat-surplace"   style="color:var(--s-surplace);">0</span><span class="stat-label">Sur place</span></div>
+    <div class="stat-item"><span class="stat-value" id="stat-quitte"     style="color:var(--s-quitte);">0</span><span class="stat-label">Quitte</span></div>
+    <div class="stat-item"><span class="stat-value" id="stat-hopital"    style="color:var(--s-hopital);">0</span><span class="stat-label">Hopital</span></div>
+  </div>
+
+  <!-- ===== VUE ETUDIANT ===== -->
+  <div id="view-etudiant" style="display:none;width:100%;height:100%;flex-direction:column;position:relative;">
+
+    <div class="etud-panels" style="bottom:var(--bottom-nav-h);">
+
+      <!-- PANNEAU 1 : OPERATIONS -->
+      <div class="etud-panel active" id="ep-ops">
+
+        <!-- Vehicule + Nom -->
+        <div class="ecard">
+          <div class="ecard-title">Identification</div>
+          <div class="row2">
+            <select class="form-select" id="amb-select">
+              <option value="">Vehicule...</option>
+              <option value="ESAMB-307">ESAMB 307</option>
+              <option value="ACE-700">ACE 700</option>
+              <option value="SAG-875">SAG 875</option>
+              <option value="ESAMB-308">ESAMB 308</option>
+              <option value="SAR-927">SAR 927</option>
+              <option value="CARDIO">CARDIO</option>
+              <option value="SK-253">SK 253</option>
+            </select>
+            <input class="form-input" type="text" id="student-name" placeholder="Prenom Nom">
+          </div>
+        </div>
+
+        <!-- ENGAGE -->
+        <button class="engage-btn" id="engage-btn" onclick="fireEngage()" disabled>
+          <span class="engage-ring"></span>
+          <span id="engage-label">ENGAGE</span>
+        </button>
+
+        <!-- GPS -->
+        <div class="ecard">
+          <div class="ecard-title">GPS</div>
+          <div class="gps-row">
+            <div class="gps-coords-sm" id="gps-coords">Non localise</div>
+            <button class="track-btn-sm off" id="track-btn" onclick="toggleTracking()" disabled>
+              <span id="track-label">START</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- STATUTS -->
+        <div class="ecard">
+          <div class="ecard-title">Statut</div>
+          <div class="status-grid">
+            <div class="status-btn active" data-status="disponible" onclick="selectStatus(this)" style="border-color:var(--s-disponible);border-width:2px;">
+              <span class="status-btn-icon">🟢</span>
+              <span class="status-btn-label" style="color:var(--s-disponible);">Disponible</span>
+            </div>
+            <div class="status-btn" data-status="depart" onclick="selectStatus(this)">
+              <span class="status-btn-icon">🔵</span>
+              <span class="status-btn-label" style="color:var(--s-depart);">Depart</span>
+            </div>
+            <div class="status-btn" data-status="surplace" onclick="selectStatus(this)">
+              <span class="status-btn-icon">🔴</span>
+              <span class="status-btn-label" style="color:var(--s-surplace);">Sur place</span>
+            </div>
+            <div class="status-btn" data-status="quitte" onclick="selectStatus(this)">
+              <span class="status-btn-icon">🟡</span>
+              <span class="status-btn-label" style="color:var(--s-quitte);">Quitte</span>
+            </div>
+            <div class="status-btn" data-status="hopital" onclick="selectStatus(this)" style="grid-column:span 2;">
+              <span class="status-btn-icon">🟣</span>
+              <span class="status-btn-label" style="color:var(--s-hopital);">Hopital</span>
+            </div>
+          </div>
+          <button class="send-btn-sm" id="send-status-btn" onclick="sendStatusNow()" disabled>Envoyer statut</button>
+        </div>
+
+      </div>
+
+      <!-- PANNEAU 2 : ALARMES -->
+      <div class="etud-panel" id="ep-alarmes">
+        <div class="ecard">
+          <div class="ecard-title">Alarmes hopital</div>
+          <div class="alarm-grid">
+            <button class="alarm-btn" data-alarm="STEMI" style="color:#ff3b3b;border-color:#ff3b3b;background:rgba(255,59,59,.08);" onclick="fireAlarm(this)">STEMI</button>
+            <button class="alarm-btn" data-alarm="AVC" style="color:#ff9f0a;border-color:#ff9f0a;background:rgba(255,159,10,.08);" onclick="fireAlarm(this)">AVC</button>
+            <button class="alarm-btn" data-alarm="DECHOCAGE" style="color:#0099ff;border-color:#0099ff;background:rgba(0,153,255,.08);" onclick="fireAlarm(this)">DECHOCAGE</button>
+            <button class="alarm-btn" data-alarm="ECMO" style="color:#a78bfa;border-color:#a78bfa;background:rgba(167,139,250,.08);" onclick="fireAlarm(this)">ECMO</button>
+            <button class="alarm-btn alarm-full" data-alarm="CAISSON HYPERBARE" style="color:#00e5a0;border-color:#00e5a0;background:rgba(0,229,160,.08);" onclick="fireAlarm(this)">CAISSON HYPERBARE</button>
+          </div>
+        </div>
+        <div class="ecard" style="background:rgba(255,59,59,.04);border-color:rgba(255,59,59,.15);">
+          <div class="ecard-title" style="color:#ff6b6b;">Instructions</div>
+          <div style="font-size:12px;color:var(--muted);line-height:1.7;">
+            Appuyez sur une alarme pour notifier l'hopital en temps reel.<br>
+            L'alarme s'affiche immediatement sur l'ecran de l'hopital.<br>
+            Se debloque apres 30 secondes.
+          </div>
+        </div>
+      </div>
+
+      <!-- PANNEAU 3 : ANNONCE PATIENT -->
+      <div class="etud-panel" id="ep-annonce">
+        <div class="ecard">
+          <div class="ecard-title">Annonce patient a l'hopital</div>
+          <div style="font-family:var(--font-mono);font-size:11px;color:var(--accent);padding:6px 9px;background:var(--bg);border-radius:6px;margin-bottom:10px;" id="annonce-vehicle-display">Vehicule non selectionne</div>
+          <textarea class="form-textarea" id="announce-text" rows="7"
+            placeholder="Ex: Patient H/75ans, douleur thoracique type STEMI inferieur, PA 90/60, FC 110, SpO2 94%, sous Aspegic 500mg + Heparine 5000UI. Arrive dans environ 8 minutes. Demande salle de dechocage."
+            oninput="updateCharCount()"></textarea>
+          <div class="char-count" id="char-count">0 / 500</div>
+          <button class="send-announce-btn" id="send-announce-btn" onclick="sendAnnounce()" disabled>ENVOYER A L'HOPITAL</button>
+          <div class="announce-confirm" id="announce-confirm"></div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- NAVIGATION BAS -->
+    <div class="bottom-nav">
+      <button class="bnav-btn active" id="bnav-ops" onclick="switchEtudPanel('ops',this)">
+        <span class="bnav-icon">🚑</span>
+        <span class="bnav-label">OPERATIONS</span>
+      </button>
+      <button class="bnav-btn" id="bnav-alarmes" onclick="switchEtudPanel('alarmes',this)">
+        <span class="bnav-icon">🚨</span>
+        <span class="bnav-label">ALARMES</span>
+      </button>
+      <button class="bnav-btn" id="bnav-annonce" onclick="switchEtudPanel('annonce',this)">
+        <span class="bnav-icon">📋</span>
+        <span class="bnav-label">ANNONCE</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- ===== VUE HOPITAL ===== -->
+  <div id="view-hopital" style="display:none;width:100%;height:100%;flex-direction:column;">
+    <div class="hosp-header">
+      <div>
+        <div class="hosp-title">ALARMES PREHOSPITALIERES</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:3px;" id="hosp-count">En attente...</div>
+      </div>
+      <div class="hosp-clock" id="hosp-clock">--:--:--</div>
+    </div>
+    <div class="hosp-body">
+      <div class="hosp-col">
+        <div class="hosp-col-title">Alarmes actives</div>
+        <div id="alarm-board"><div class="no-data">Aucune alarme.</div></div>
+      </div>
+      <div class="hosp-col">
+        <div class="hosp-col-title">Annonces patients</div>
+        <div id="announce-board"><div class="no-data">Aucune annonce.</div></div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- Toast feedback -->
+<div class="feedback-toast" id="toast"></div>
+
+<script type="module">
+import { initializeApp }                                          from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+import { getDatabase, ref, set, push, remove, onValue, query, orderByChild, startAt, get }
+                                                                  from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
+import { getAuth, signInAnonymously }                             from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+
+const FC = {
+  apiKey:"AIzaSyD8mUONx_ceCw5KoyuTjdxjH15Xz4LLKKA",
+  authDomain:"amb-tracker-esamb.firebaseapp.com",
+  databaseURL:"https://amb-tracker-esamb-default-rtdb.europe-west1.firebasedatabase.app",
+  projectId:"amb-tracker-esamb",
+  storageBucket:"amb-tracker-esamb.firebasestorage.app",
+  messagingSenderId:"267967758932",
+  appId:"1:267967758932:web:e0f190a67c83f82e2ae3c1"
+};
+const db = getDatabase(initializeApp(FC));
+const auth = getAuth();
+
+// Connexion anonyme automatique — requise par les règles de sécurité Firebase
+signInAnonymously(auth).catch(e => console.error('Auth error:', e));
+
+const STATUS={
+  disponible:{label:'Disponible',color:'#00e5a0',bg:'rgba(0,229,160,.12)'},
+  engage:    {label:'Engage',    color:'#ff3b3b', bg:'rgba(255,59,59,.12)'},
+  depart:    {label:'Depart',    color:'#0099ff', bg:'rgba(0,153,255,.12)'},
+  surplace:  {label:'Sur place', color:'#ff6b35', bg:'rgba(255,107,53,.12)'},
+  quitte:    {label:'Quitte',    color:'#f59e0b', bg:'rgba(245,158,11,.12)'},
+  hopital:   {label:'Hopital',   color:'#a78bfa', bg:'rgba(167,139,250,.12)'},
+};
+const ALARM_COLORS={'STEMI':'#ff3b3b','AVC':'#ff9f0a','DECHOCAGE':'#0099ff','ECMO':'#a78bfa','CAISSON HYPERBARE':'#00e5a0'};
+
+const params=new URLSearchParams(window.location.search);
+const mode=params.get('vue')||'formateur';
+const isE=mode==='etudiant', isH=mode==='hopital', isF=mode==='formateur';
+
+if(isE){
+  document.body.classList.add('mode-etudiant');
+  document.getElementById('view-formateur').style.display='none';
+  document.getElementById('view-etudiant').style.display='flex';
+  document.getElementById('view-hopital').style.display='none';
+  document.getElementById('stats-bar').style.display='none';
+  document.getElementById('role-badge').textContent='ETUDIANT';
+  document.getElementById('role-badge').className='role-badge role-etudiant';
+} else if(isH){
+  document.body.classList.add('mode-hopital');
+  document.getElementById('view-formateur').style.display='none';
+  document.getElementById('view-etudiant').style.display='none';
+  document.getElementById('view-hopital').style.display='flex';
+  document.getElementById('stats-bar').style.display='none';
+  document.getElementById('role-badge').textContent='HOPITAL';
+  document.getElementById('role-badge').className='role-badge role-hopital';
+} else {
+  document.getElementById('role-badge').textContent='FORMATEUR';
+  document.getElementById('role-badge').className='role-badge role-formateur';
+}
+
+// Horloge
+const tick=()=>{
+  const t=new Date().toLocaleTimeString('fr-CH',{hour12:false});
+  document.getElementById('clock').textContent=t;
+  const hc=document.getElementById('hosp-clock');if(hc)hc.textContent=t;
+};
+tick();setInterval(tick,1000);
+
+// Toast
+let toastTimer=null;
+function toast(msg,type='ok'){
+  const el=document.getElementById('toast');
+  el.textContent=msg;
+  el.style.color=type==='ok'?'#00e5a0':'#ff6b35';
+  el.classList.add('show');
+  if(toastTimer) clearTimeout(toastTimer);
+  toastTimer=setTimeout(()=>el.classList.remove('show'),2500);
+}
+
+// Carte formateur
+let map,markers={},polylines={},selectedAmb=null,ambData={},histData={},alarmData={},announceData={};
+let showAllTraces=false;
+if(isF){
+  setTimeout(()=>{
+    map=L.map('map',{zoomControl:false}).setView([46.2044,6.1432],13);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'OSM'}).addTo(map);
+    L.control.zoom({position:'bottomright'}).addTo(map);
+    map.invalidateSize();
+    Object.entries(ambData).forEach(([id,d])=>{if(d.lat&&d.lng)placeMarker(id,d);});
+  },200);
+}
+
+const fmtTime=ts=>ts?new Date(ts).toLocaleTimeString('fr-CH',{hour:'2-digit',minute:'2-digit',second:'2-digit'}):'--:--:--';
+const fmtDur=ms=>{
+  if(!ms||ms<=0) return null;
+  const s=Math.floor(ms/1000),m=Math.floor(s/60),h=Math.floor(m/60);
+  if(h>0) return h+'h'+String(m%60).padStart(2,'0')+'min';
+  if(m>0) return m+'min'+String(s%60).padStart(2,'0')+'s';
+  return s+'s';
+};
+const timeAgo=ts=>{if(!ts)return '?';const s=Math.floor((Date.now()-ts)/1000);if(s<60)return s+'s';const m=Math.floor(s/60);return m<60?m+'min':Math.floor(m/60)+'h';};
+const markerLabel=id=>{if(id==='CARDIO')return 'CARD';if(id.includes('-')){const p=id.split('-');return p[0].slice(0,4)+p[1].slice(0,3);}return id.slice(0,5);};
+
+function haversineKm(lat1,lng1,lat2,lng2){
+  const R=6371,dLat=(lat2-lat1)*Math.PI/180,dLng=(lng2-lng1)*Math.PI/180;
+  const a=Math.sin(dLat/2)**2+Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLng/2)**2;
+  return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
+}
+
+function computeTimers(entries){
+  if(!entries||!entries.length) return {};
+  const first={},coords={};
+  entries.forEach(e=>{if(!first[e.status]){first[e.status]=e.ts;coords[e.status]={lat:e.lat,lng:e.lng};}});
+  const r={};
+  if(first.engage&&first.depart) r.delaiDepart=fmtDur(first.depart-first.engage);
+  if(first.surplace&&first.quitte) r.tempsSite=fmtDur(first.quitte-first.surplace);
+  const fin=first.hopital||first.quitte;
+  if(first.engage&&fin) r.totalIntervention=fmtDur(fin-first.engage);
+  // Distance base -> intervention (engage -> surplace)
+  if(coords.engage&&coords.surplace&&coords.engage.lat&&coords.surplace.lat){
+    const km=haversineKm(coords.engage.lat,coords.engage.lng,coords.surplace.lat,coords.surplace.lng);
+    if(km>0.05){
+      r.distance=km.toFixed(2)+' km';
+      // Vitesse moyenne réelle (km/h) = distance / durée engage->surplace
+      if(first.engage&&first.surplace){
+        const durH=(first.surplace-first.engage)/3600000;
+        if(durH>0) r._vitesseMoy=km/durH; // km/h interne
+      }
+    }
+  }
+  // Coords engage pour ETA live
+  if(coords.engage) r._coordsBase=coords.engage;
+  if(coords.surplace) r._coordsIntervention=coords.surplace;
+  r._tsEngage=first.engage;
+  r._tsSurplace=first.surplace;
+  return r;
+}
+
+// ETA en temps réel : appelé avec la position actuelle du véhicule
+function computeETA(entries, curLat, curLng){
+  const t=computeTimers(entries);
+  // ETA uniquement si on est en route (engage ou depart) et pas encore sur place
+  if(!t._coordsBase||t._tsSurplace) return null;
+  // Distance actuelle -> lieu d'intervention estimé
+  // On utilise la vitesse moyenne si on l'a, sinon 50 km/h par défaut
+  const vitesse=t._vitesseMoy||50;
+  // Distance restante = base -> position actuelle (pour estimer combien on a parcouru)
+  const distParcourue=haversineKm(t._coordsBase.lat,t._coordsBase.lng,curLat,curLng);
+  // Distance totale base -> intervention
+  const distTotale=t._coordsIntervention
+    ?haversineKm(t._coordsBase.lat,t._coordsBase.lng,t._coordsIntervention.lat,t._coordsIntervention.lng)
+    :null;
+  if(!distTotale) return null;
+  const distRestante=Math.max(0,distTotale-distParcourue);
+  const etaMin=Math.round((distRestante/vitesse)*60);
+  return {distRestante:distRestante.toFixed(2),etaMin,vitesse:Math.round(vitesse),distTotale:distTotale.toFixed(2)};
+}
+
+function placeMarker(id,d){
+  if(!map) return;
+  const cfg=STATUS[d.status]||STATUS.disponible;
+  const icon=L.divIcon({className:'',
+    html:`<div style="min-width:46px;height:34px;border-radius:17px 17px 17px 0;transform:rotate(-45deg);background:${cfg.color};border:2px solid rgba(255,255,255,.25);display:flex;align-items:center;justify-content:center;padding:0 7px;box-shadow:0 4px 12px rgba(0,0,0,.5);"><span style="transform:rotate(45deg);font-size:9px;font-weight:700;color:#000;font-family:monospace;white-space:nowrap;">${markerLabel(id)}</span></div>`,
+    iconSize:[46,34],iconAnchor:[14,34],popupAnchor:[9,-36]});
+  if(markers[id]) markers[id].remove();
+  const crew=Array.isArray(d.crew)?d.crew.join(' / '):(d.crew||'—');
+  const t=computeTimers(histData[id]);
+  let th='';
+  if(t.delaiDepart) th+=`<div style="font-size:11px;color:#9ca3af;margin-top:2px;">Delai depart: <strong>${t.delaiDepart}</strong></div>`;
+  if(t.tempsSite)   th+=`<div style="font-size:11px;color:#9ca3af;">Temps site: <strong>${t.tempsSite}</strong></div>`;
+  if(t.totalIntervention) th+=`<div style="font-size:11px;color:#9ca3af;">Total: <strong>${t.totalIntervention}</strong></div>`;
+  if(t.distance)    th+=`<div style="font-size:11px;color:#9ca3af;">Distance: <strong>${t.distance}</strong></div>`;
+  const m=L.marker([d.lat,d.lng],{icon}).addTo(map);
+  m.bindPopup(`<div style="min-width:180px;"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:7px;"><strong style="font-family:monospace;color:${cfg.color};">${id.replace(/-/g,' ')}</strong><span style="background:${cfg.bg};color:${cfg.color};padding:2px 6px;border-radius:3px;font-size:10px;font-family:monospace;">${cfg.label.toUpperCase()}</span></div><div style="color:#9ca3af;font-size:12px;margin-bottom:4px;">${crew}</div>${th}</div>`);
+  m.on('click',()=>selectAmb(id));
+  markers[id]=m;
+}
+
+function drawTrace(id){
+  if(!map) return;
+  if(polylines[id]){polylines[id].forEach(l=>l.remove());delete polylines[id];}
+  const e=histData[id];if(!e||e.length<2) return;
+  const cfg=STATUS[ambData[id]?.status]||STATUS.disponible;
+  const poly=L.polyline(e.map(p=>[p.lat,p.lng]),{color:cfg.color,weight:3,opacity:.7,dashArray:'6 4'}).addTo(map);
+  const dots=e.map(p=>{const sc=STATUS[p.status]||STATUS.disponible;return L.circleMarker([p.lat,p.lng],{radius:4,color:sc.color,fillColor:sc.color,fillOpacity:1,weight:2}).addTo(map).bindTooltip(fmtTime(p.ts)+' — '+sc.label,{direction:'top'});});
+  polylines[id]=[poly,...dots];
+}
+function clearAllTraces(){Object.values(polylines).forEach(a=>a.forEach(l=>l.remove()));polylines={};}
+function drawAllTraces(){clearAllTraces();Object.keys(histData).forEach(id=>drawTrace(id));}
+window.toggleAllTraces=()=>{showAllTraces=!showAllTraces;document.getElementById('trace-all-btn').classList.toggle('active',showAllTraces);if(showAllTraces)drawAllTraces();else clearAllTraces();};
+
+function selectAmb(id){
+  selectedAmb=id;const d=ambData[id];
+  if(d&&map){map.flyTo([d.lat,d.lng],15,{duration:.8});markers[id]?.openPopup();}
+  renderLive();
+  const s=document.getElementById('hist-select');if(s){s.value=id;renderHistory();}
+  switchTab('hist',document.querySelectorAll('.stab')[1]);
+}
+window._sel=selectAmb;
+
+function renderLive(){
+  const list=document.getElementById('amb-list');if(!list) return;
+  const ids=Object.keys(ambData);
+  if(!ids.length){list.innerHTML='<div class="empty-state">En attente...</div>';document.getElementById('active-count').textContent='0';['disponible','depart','surplace','quitte','hopital'].forEach(s=>{const el=document.getElementById('stat-'+s);if(el)el.textContent='0';});return;}
+  document.getElementById('active-count').textContent=ids.length;
+  list.innerHTML=ids.map(id=>{
+    const d=ambData[id],cfg=STATUS[d.status]||STATUS.disponible;
+    const crew=Array.isArray(d.crew)?d.crew.join(' / '):(d.crew||'—');
+    const t=computeTimers(histData[id]);
+    let chips='';
+    if(t.delaiDepart) chips+=`<span class="timer-chip" style="color:#0099ff;">Dep:${t.delaiDepart}</span>`;
+    if(t.tempsSite)   chips+=`<span class="timer-chip" style="color:#ff6b35;">Site:${t.tempsSite}</span>`;
+    if(t.totalIntervention) chips+=`<span class="timer-chip" style="color:var(--accent);">Tot:${t.totalIntervention}</span>`;
+    if(t.distance)    chips+=`<span class="timer-chip" style="color:#a78bfa;">${t.distance}</span>`;
+    // ETA live si véhicule en route (statut engage ou depart, pas encore surplace)
+    let etaHtml='';
+    if((d.status==='engage'||d.status==='depart')&&d.lat&&d.lng&&histData[id]){
+      const eta=computeETA(histData[id],d.lat,d.lng);
+      if(eta){
+        etaHtml=eta.etaMin<=0
+          ?`<div class="eta-chip arrived">Arrive sur zone</div>`
+          :`<div class="eta-chip">ETA ~${eta.etaMin}min — ${eta.distRestante}km restants (${eta.vitesse}km/h moy.)</div>`;
+      }
+    }
+    const ann=announceData[id];
+    const annHtml=ann?`<div class="announce-preview">"${ann.text.slice(0,70)}${ann.text.length>70?'...':''}"</div>`:'';
+    return `<div class="amb-card${selectedAmb===id?' selected':''}" onclick="window._sel('${id}')">
+      <div style="position:absolute;left:0;top:0;bottom:0;width:3px;background:${cfg.color};border-radius:8px 0 0 8px;"></div>
+      <div class="amb-card-top"><span class="amb-name" style="color:${cfg.color};">${id.replace(/-/g,' ')}</span><span class="status-pill" style="background:${cfg.bg};color:${cfg.color};">${cfg.label}</span></div>
+      <div class="amb-crew">${crew}</div>
+      ${chips?`<div class="timer-row">${chips}</div>`:''}${etaHtml}${annHtml}
+      <div class="amb-meta">${timeAgo(d.lastUpdate)}</div>
+    </div>`;
+  }).join('');
+  const c={disponible:0,depart:0,surplace:0,quitte:0,hopital:0};
+  ids.forEach(id=>{const s=ambData[id].status;if(s in c)c[s]++;});
+  Object.entries(c).forEach(([s,v])=>{const el=document.getElementById('stat-'+s);if(el)el.textContent=v;});
+}
+
+window.renderHistory=()=>{
+  const filter=document.getElementById('hist-select')?.value||'all';
+  const cont=document.getElementById('hist-content');if(!cont)return;
+  const ids=filter==='all'?Object.keys(histData):(histData[filter]?[filter]:[]);
+  if(!ids.length){cont.innerHTML='<div class="empty-state">Aucun historique.</div>';return;}
+  cont.innerHTML=ids.map(id=>{
+    const e=histData[id];if(!e||!e.length)return '';
+    const cfg=STATUS[ambData[id]?.status]||STATUS.disponible;
+    const t=computeTimers(e);
+    const has=t.delaiDepart||t.tempsSite||t.totalIntervention||t.distance;
+    const tb=has?`<div class="timer-block">
+      ${t.delaiDepart?`<div class="timer-line"><span class="timer-label">Delai depart</span><span class="timer-value" style="color:#0099ff;">${t.delaiDepart}</span></div>`:''}
+      ${t.tempsSite?`<div class="timer-line"><span class="timer-label">Temps site</span><span class="timer-value" style="color:#ff6b35;">${t.tempsSite}</span></div>`:''}
+      ${t.totalIntervention?`<div class="timer-line"><span class="timer-label">Total</span><span class="timer-value" style="color:var(--accent);">${t.totalIntervention}</span></div>`:''}
+      ${t.distance?`<div class="timer-line"><span class="timer-label">Distance</span><span class="timer-value" style="color:#a78bfa;">${t.distance}</span></div>`:''}
+    </div>`:'<div style="color:var(--muted);font-size:11px;padding:6px 0;">Intervention en cours...</div>';
+    return `<div class="hist-vehicle"><div class="hist-vehicle-title"><div style="width:8px;height:8px;border-radius:50%;background:${cfg.color};"></div><span>${id.replace(/-/g,' ')}</span></div>${tb}</div>`;
+  }).join('');
+};
+function updateHistSelect(){
+  const s=document.getElementById('hist-select');if(!s)return;
+  s.innerHTML='<option value="all">Tous</option>'+Object.keys(histData).map(id=>`<option value="${id}">${id.replace(/-/g,' ')}</option>`).join('');
+}
+
+// Alarmes + annonces hôpital
+let alarmClock=null;
+function renderAlarmBoard(){
+  const board=document.getElementById('alarm-board');if(!board)return;
+  const entries=Object.values(alarmData).sort((a,b)=>b.ts-a.ts);
+  const cEl=document.getElementById('hosp-count');
+  if(!entries.length){board.innerHTML='<div class="no-data">Aucune alarme.</div>';if(cEl)cEl.textContent='Aucune alarme';return;}
+  if(cEl)cEl.textContent=entries.length+' alarme(s)';
+  board.innerHTML=entries.map(a=>{
+    const color=ALARM_COLORS[a.type]||'#e8eaf0';
+    const elapsed=fmtDur(Date.now()-a.ts)||'0s';
+    // ETA live pour cette alarme
+    const ambCur=ambData[a.ambId];
+    let etaBlock='';
+    if(ambCur&&(ambCur.status==='engage'||ambCur.status==='depart')&&ambCur.lat&&histData[a.ambId]){
+      const eta=computeETA(histData[a.ambId],ambCur.lat,ambCur.lng);
+      if(eta){
+        etaBlock=eta.etaMin<=0
+          ?`<div class="alarm-eta arrived">Arrive sur zone</div>`
+          :`<div class="alarm-eta">ETA ~${eta.etaMin} min — ${eta.distRestante} km</div>`;
+      }
+    }
+    return `<div class="alarm-card" style="border-color:${color};">
+      <div class="alarm-ping" style="background:${color};"></div>
+      <div class="alarm-type" style="color:${color};">${a.type}</div>
+      <div class="alarm-vehicle">${(a.ambId||'').replace(/-/g,' ')}</div>
+      <div class="alarm-time-sent">Envoye a ${fmtTime(a.ts)}</div>
+      <div class="alarm-crew-hosp">${a.crew||'—'}</div>
+      ${etaBlock}
+      <div class="alarm-elapsed" style="color:${color};">+ ${elapsed}</div>
+    </div>`;
+  }).join('');
+}
+function renderAnnounceBoard(){
+  const board=document.getElementById('announce-board');if(!board)return;
+  const entries=Object.entries(announceData).sort((a,b)=>b[1].ts-a[1].ts);
+  if(!entries.length){board.innerHTML='<div class="no-data">Aucune annonce.</div>';return;}
+  board.innerHTML=entries.map(([id,a])=>`
+    <div class="announce-hosp-card">
+      <div class="announce-hosp-vehicle">${id.replace(/-/g,' ')}</div>
+      <div class="announce-hosp-time">${fmtTime(a.ts)}</div>
+      <div class="announce-hosp-text">${a.text}</div>
+    </div>`).join('');
+}
+
+// Firebase
+onValue(ref(db,'ambulances'),snap=>{
+  ambData=snap.val()||{};
+  if(isF){Object.keys(markers).forEach(id=>{if(!ambData[id]){markers[id].remove();delete markers[id];}});Object.entries(ambData).forEach(([id,d])=>{if(d.lat&&d.lng)placeMarker(id,d);});renderLive();}
+  document.getElementById('conn-dot').classList.toggle('ok',true);
+},()=>document.getElementById('conn-dot').classList.remove('ok'));
+
+const todayStart=(()=>{const d=new Date();d.setHours(0,0,0,0);return d.getTime();})();
+onValue(query(ref(db,'historique'),orderByChild('ts'),startAt(todayStart)),snap=>{
+  histData={};snap.forEach(c=>{const e=c.val();if(!e.ambId)return;if(!histData[e.ambId])histData[e.ambId]=[];histData[e.ambId].push(e);});
+  if(isF){updateHistSelect();renderHistory();if(showAllTraces)drawAllTraces();renderLive();}
+});
+onValue(ref(db,'alarmes'),snap=>{
+  alarmData=snap.val()||{};
+  if(isH){renderAlarmBoard();if(!alarmClock)alarmClock=setInterval(()=>renderAlarmBoard(),1000);}
+});
+onValue(ref(db,'annonces'),snap=>{
+  announceData=snap.val()||{};
+  if(isH)renderAnnounceBoard();
+  if(isF)renderLive();
+});
+
+// Nettoyage minuit
+if(isF){
+  const now=new Date(),midnight=new Date(now);midnight.setHours(24,0,5,0);
+  setTimeout(async()=>{
+    try{const s=await get(ref(db,'historique'));if(s.exists()){const t=new Date();t.setHours(0,0,0,0);s.forEach(c=>{if(c.val().ts<t.getTime())remove(c.ref);});}remove(ref(db,'alarmes'));remove(ref(db,'annonces'));}catch(e){}
+  },midnight.getTime()-now.getTime());
+}
+
+// ETUDIANT logique
+let curStatus='disponible',curLat=null,curLng=null,tracking=false,watchId=null,autoInt=null;
+
+function checkReady(){
+  const ok=document.getElementById('amb-select')?.value&&document.getElementById('student-name')?.value.trim();
+  ['track-btn','engage-btn','send-status-btn','send-announce-btn'].forEach(id=>{const el=document.getElementById(id);if(el)el.disabled=!ok;});
+  const ambId=document.getElementById('amb-select')?.value||'';
+  const vd=document.getElementById('annonce-vehicle-display');if(vd)vd.textContent=ambId?ambId.replace(/-/g,' '):'Vehicule non selectionne';
+}
+document.getElementById('amb-select')?.addEventListener('change',checkReady);
+document.getElementById('student-name')?.addEventListener('input',checkReady);
+
+async function pushFB(){
+  const ambId=document.getElementById('amb-select').value,name=document.getElementById('student-name').value.trim();
+  if(!ambId||!name||!curLat)return;
+  const ex=ambData[ambId];let crew=ex?.crew||[];if(!Array.isArray(crew))crew=[crew];if(!crew.includes(name))crew=[...crew,name];
+  await set(ref(db,'ambulances/'+ambId),{status:curStatus,lat:curLat,lng:curLng,crew,lastUpdate:Date.now()});
+  await push(ref(db,'historique'),{ambId,status:curStatus,lat:curLat,lng:curLng,ts:Date.now()});
+}
+async function clearTraces(ambId){try{const s=await get(ref(db,'historique'));if(!s.exists())return;s.forEach(c=>{if(c.val().ambId===ambId)remove(c.ref);});}catch(e){}}
+
+window.fireEngage=async()=>{
+  const ambId=document.getElementById('amb-select').value,name=document.getElementById('student-name').value.trim();
+  if(!ambId||!name){toast('Selectionnez vehicule et nom','err');return;}
+  const btn=document.getElementById('engage-btn'),lbl=document.getElementById('engage-label');
+  await clearTraces(ambId);
+  const now=Date.now();const ex=ambData[ambId];let crew=ex?.crew||[];if(!Array.isArray(crew))crew=[crew];if(!crew.includes(name))crew=[...crew,name];
+  await set(ref(db,'ambulances/'+ambId),{status:'engage',lat:curLat||0,lng:curLng||0,crew,lastUpdate:now});
+  await push(ref(db,'historique'),{ambId,status:'engage',lat:curLat||0,lng:curLng||0,ts:now});
+  curStatus='engage';btn.classList.add('fired');lbl.textContent='ENGAGE '+fmtTime(now);
+  toast('Engagement enregistre a '+fmtTime(now),'ok');
+  setTimeout(()=>{btn.classList.remove('fired');lbl.textContent='ENGAGE';},60000);
+};
+
+window.toggleTracking=()=>tracking?stopTracking():startTracking();
+function startTracking(){
+  if(!navigator.geolocation){toast('GPS non disponible','err');return;}
+  tracking=true;
+  document.getElementById('track-btn').classList.replace('off','on');
+  document.getElementById('track-label').textContent='STOP GPS';
+  document.getElementById('gps-info')&&(document.getElementById('gps-info').textContent='');
+  document.getElementById('send-status-btn').disabled=false;
+  watchId=navigator.geolocation.watchPosition(
+    pos=>{curLat=pos.coords.latitude;curLng=pos.coords.longitude;document.getElementById('gps-coords').textContent=curLat.toFixed(5)+', '+curLng.toFixed(5);},
+    ()=>toast('Erreur GPS','err'),{enableHighAccuracy:true,maximumAge:10000,timeout:15000}
+  );
+  autoInt=setInterval(async()=>{if(curLat){await pushFB();toast('Position envoyee','ok');}},15000);
+  setTimeout(async()=>{if(curLat)await pushFB();},2000);
+}
+function stopTracking(){
+  tracking=false;
+  if(watchId!==null){navigator.geolocation.clearWatch(watchId);watchId=null;}
+  if(autoInt){clearInterval(autoInt);autoInt=null;}
+  document.getElementById('track-btn').classList.replace('on','off');
+  document.getElementById('track-label').textContent='START';
+  document.getElementById('send-status-btn').disabled=true;
+}
+
+window.selectStatus=async el=>{
+  document.querySelectorAll('.status-btn').forEach(o=>{o.classList.remove('active');o.style.borderColor='';o.style.borderWidth='';});
+  el.classList.add('active');curStatus=el.dataset.status;
+  el.style.borderColor=STATUS[curStatus]?.color||'#fff';el.style.borderWidth='2px';
+  if(tracking&&curLat){await pushFB();toast('Statut: '+STATUS[curStatus].label,'ok');}
+};
+window.sendStatusNow=async()=>{if(!curLat){toast('GPS non disponible','err');return;}await pushFB();toast('Statut envoye','ok');};
+
+window.fireAlarm=async btn=>{
+  if(btn.classList.contains('fired'))return;
+  const ambId=document.getElementById('amb-select').value,name=document.getElementById('student-name').value.trim();
+  if(!ambId||!name){toast('Selectionnez vehicule et nom','err');return;}
+  try{
+    await push(ref(db,'alarmes'),{type:btn.dataset.alarm,ambId,crew:name,ts:Date.now()});
+    btn.classList.add('fired');btn.textContent='OK '+btn.dataset.alarm;
+    toast('Alarme '+btn.dataset.alarm+' envoyee','ok');
+    setTimeout(()=>{btn.classList.remove('fired');btn.textContent=btn.dataset.alarm;},30000);
+  }catch(e){toast('Erreur: '+e.message,'err');}
+};
+
+window.updateCharCount=()=>{
+  const v=document.getElementById('announce-text')?.value||'';
+  const c=document.getElementById('char-count');if(c)c.textContent=v.length+' / 500';
+};
+window.sendAnnounce=async()=>{
+  const ambId=document.getElementById('amb-select').value;
+  const text=document.getElementById('announce-text')?.value?.trim();
+  const conf=document.getElementById('announce-confirm');
+  if(!ambId){toast('Selectionnez un vehicule dans Operations','err');return;}
+  if(!text){toast('Redigez un message','err');return;}
+  if(text.length>500){toast('Message trop long (500 max)','err');return;}
+  try{
+    await set(ref(db,'annonces/'+ambId),{text,ambId,ts:Date.now()});
+    toast('Annonce envoyee','ok');
+    if(conf){conf.style.color='#00e5a0';conf.textContent='Envoye a l\'hopital a '+fmtTime(Date.now());}
+  }catch(e){toast('Erreur: '+e.message,'err');}
+};
+
+// Navigation étudiant
+window.switchEtudPanel=(id,btn)=>{
+  document.querySelectorAll('.etud-panel').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.bnav-btn').forEach(b=>b.classList.remove('active'));
+  document.getElementById('ep-'+id).classList.add('active');
+  btn.classList.add('active');
+};
+
+// Onglets formateur
+window.switchTab=(tab,el)=>{
+  document.querySelectorAll('.stab').forEach(t=>t.classList.remove('active'));
+  el.classList.add('active');
+  document.querySelectorAll('.sidebar-panel').forEach(p=>p.classList.remove('active'));
+  document.getElementById('panel-'+tab).classList.add('active');
+  if(tab==='hist')renderHistory();
+};
+window.switchView=(view,evt)=>{
+  document.querySelectorAll('.view-btn').forEach(b=>b.classList.remove('active'));
+  evt.currentTarget.classList.add('active');
+  if(view==='formateur'){
+    document.getElementById('view-formateur').style.display='flex';
+    document.getElementById('view-etudiant').style.display='none';
+    document.getElementById('stats-bar').style.display='flex';
+    setTimeout(()=>map?.invalidateSize(),100);
+  }else{
+    document.getElementById('view-formateur').style.display='none';
+    document.getElementById('view-etudiant').style.display='flex';
+    document.getElementById('stats-bar').style.display='none';
+  }
+};
+
+// PDF
+window.exportPDF=()=>{
+  const {jsPDF}=window.jspdf;const doc=new jsPDF();
+  const filter=document.getElementById('hist-select')?.value||'all';
+  const ids=filter==='all'?Object.keys(histData):(histData[filter]?[filter]:[]);
+  let y=20;
+  doc.setFontSize(16);doc.setTextColor(0,180,130);doc.text('AMB TRACKER - Rapport',14,y);y+=7;
+  doc.setFontSize(9);doc.setTextColor(120);doc.text('Genere le '+new Date().toLocaleDateString('fr-CH')+' a '+new Date().toLocaleTimeString('fr-CH'),14,y);y+=10;
+  ids.forEach(id=>{
+    const entries=histData[id];if(!entries||!entries.length)return;
+    const t=computeTimers(entries);if(y>250){doc.addPage();y=20;}
+    doc.setFontSize(13);doc.setTextColor(0,130,220);doc.text(id.replace(/-/g,' '),14,y);y+=6;
+    const crew=Array.isArray(ambData[id]?.crew)?ambData[id].crew.join(', '):(ambData[id]?.crew||'—');
+    doc.setFontSize(9);doc.setTextColor(80);doc.text('Equipe : '+crew,14,y);y+=5;
+    doc.setDrawColor(50);doc.line(14,y,196,y);y+=5;
+    if(t.delaiDepart){doc.setFontSize(10);doc.setTextColor(0,130,220);doc.text('Delai de depart :',14,y);doc.setTextColor(20);doc.text(t.delaiDepart,110,y);y+=6;}
+    if(t.tempsSite){doc.setFontSize(10);doc.setTextColor(220,100,40);doc.text('Temps sur site :',14,y);doc.setTextColor(20);doc.text(t.tempsSite,110,y);y+=6;}
+    if(t.totalIntervention){doc.setFontSize(10);doc.setTextColor(0,180,130);doc.text('Duree totale :',14,y);doc.setTextColor(20);doc.text(t.totalIntervention,110,y);y+=6;}
+    if(t.distance){doc.setFontSize(10);doc.setTextColor(150,100,250);doc.text('Distance :',14,y);doc.setTextColor(20);doc.text(t.distance,110,y);y+=6;}
+    const ann=announceData[id];
+    if(ann){y+=2;doc.setFontSize(9);doc.setTextColor(0,180,130);doc.text('Annonce patient ('+fmtTime(ann.ts)+') :',14,y);y+=5;doc.setTextColor(60);doc.splitTextToSize(ann.text,170).forEach(l=>{if(y>270){doc.addPage();y=20;}doc.text(l,14,y);y+=4;});}
+    y+=8;
+  });
+  doc.save('rapport-'+new Date().toLocaleDateString('fr-CH').replace(/\//g,'-')+'.pdf');
+};
+setInterval(renderLive,30000);
+</script>
+</body>
+</html>
